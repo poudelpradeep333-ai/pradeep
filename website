@@ -1,0 +1,628 @@
+import React, { useState } from 'react';
+import { AppTab, SymptomCheckerState } from '../types';
+
+interface SymptomCheckerTabProps {
+  setActiveTab: (tab: AppTab) => void;
+  prefillBooking: (service: string, reason: string) => void;
+}
+
+interface PrecalculatedResult {
+  condition: string;
+  probability: string;
+  explanation: string;
+  actions: string[];
+}
+
+export default function SymptomCheckerTab({ setActiveTab, prefillBooking }: SymptomCheckerTabProps) {
+  const [state, setState] = useState<SymptomCheckerState>({
+    currentStep: 1,
+    selectedSymptoms: [],
+    searchQuery: '',
+    severity: 5,
+    frequency: 'Constant',
+    duration: '1-3 Days',
+    associatedSymptoms: []
+  });
+
+  const quickSymptoms = [
+    { id: '1', name: 'Headache', bodyArea: 'head' },
+    { id: '2', name: 'Fever', bodyArea: 'general' },
+    { id: '3', name: 'Cough', bodyArea: 'chest' },
+    { id: '4', name: 'Fatigue', bodyArea: 'general' },
+    { id: '5', name: 'Nausea', bodyArea: 'abdomen' },
+    { id: '6', name: 'Sore Throat', bodyArea: 'head' },
+    { id: '7', name: 'Chest Tightness', bodyArea: 'chest' },
+    { id: '8', name: 'Dizziness', bodyArea: 'head' },
+  ];
+
+  const handleSymptomToggle = (name: string) => {
+    setState(prev => {
+      const exists = prev.selectedSymptoms.includes(name);
+      return {
+        ...prev,
+        selectedSymptoms: exists
+          ? prev.selectedSymptoms.filter(s => s !== name)
+          : [...prev.selectedSymptoms, name]
+      };
+    });
+  };
+
+  const handleBodyAreaClick = (area: 'head' | 'chest' | 'abdomen' | 'general' | 'limb') => {
+    // Select relevant symptoms for that body area to make the diagram highly interactive and friendly!
+    const associated = quickSymptoms.filter(s => s.bodyArea === area).map(s => s.name);
+    if (associated.length > 0) {
+      setState(prev => {
+        // Toggle them off if they are all selected, otherwise select them
+        const allSelected = associated.every(name => prev.selectedSymptoms.includes(name));
+        return {
+          ...prev,
+          selectedSymptoms: allSelected
+            ? prev.selectedSymptoms.filter(name => !associated.includes(name))
+            : Array.from(new Set([...prev.selectedSymptoms, ...associated]))
+        };
+      });
+    }
+  };
+
+  const filteredSymptoms = quickSymptoms.filter(s =>
+    s.name.toLowerCase().includes(state.searchQuery.toLowerCase())
+  );
+
+  const handleSeverityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    setState(prev => ({ ...prev, severity: value }));
+  };
+
+  const selectFrequency = (freq: 'Intermittent' | 'Constant' | 'Worsening') => {
+    setState(prev => ({ ...prev, frequency: freq }));
+  };
+
+  const selectDuration = (dur: 'Less than 24h' | '1-3 Days' | '4-7 Days' | 'More than a week') => {
+    setState(prev => ({ ...prev, duration: dur }));
+  };
+
+  const handleAssociatedToggle = (name: string) => {
+    setState(prev => {
+      const exists = prev.associatedSymptoms.includes(name);
+      return {
+        ...prev,
+        associatedSymptoms: exists
+          ? prev.associatedSymptoms.filter(item => item !== name)
+          : [...prev.associatedSymptoms, name]
+      };
+    });
+  };
+
+  const handleBookWithPrefill = (condition: string) => {
+    const reasonText = `Symptom report analyzed:
+- Primary issues: ${state.selectedSymptoms.join(', ') || 'General checkup needed'}
+- Severity: ${state.severity}/10 (${state.frequency})
+- Duration: ${state.duration}
+- Associated symptoms: ${state.associatedSymptoms.join(', ') || 'None'}
+- Preliminary indication: ${condition}`;
+
+    prefillBooking('General Consultation', reasonText);
+    setActiveTab('book-appointment');
+  };
+
+  // Dynamic analysis generator based on choices
+  const calculateResult = (): PrecalculatedResult => {
+    const selected = state.selectedSymptoms;
+    const hasHeadache = selected.includes('Headache');
+    const hasFever = selected.includes('Fever');
+    const hasCough = selected.includes('Cough');
+    const hasSoreThroat = selected.includes('Sore Throat');
+    const hasNausea = selected.includes('Nausea');
+
+    if (hasFever && hasCough && hasSoreThroat) {
+      return {
+        condition: 'Influenza (Common Flu)',
+        probability: 'High Probability',
+        explanation: 'Your combination of active fever, persistent cough, and sore throat is highly consistent with viral upper respiratory influenza strain.',
+        actions: [
+          'Monitor body temperature every 4-6 hours.',
+          'Maintain intensive hydration with clear electrolyte juices.',
+          'Take standard over-the-counter anti-fever therapy if approved by your pharmacist.',
+          'Schedule a diagnostic consultation with Dr. Pradeep if symptoms persist'
+        ]
+      };
+    } else if (hasHeadache && hasSoreThroat) {
+      return {
+        condition: 'Acute Sinusitis or Pharyngitis',
+        probability: 'Moderate Probability',
+        explanation: 'Head pressure, pain, and localized throat inflammation might represent acute bacterial or viral pharyngitis or sinus congestion.',
+        actions: [
+          'Perform sterile saline throat gargling twice daily.',
+          'Utilize a warm humidifier in your sleeping environment.',
+          'Maintain comfortable bed rest and monitor throat swelling.',
+          'Schedule an appointment with Dr. Pradeep to evaluate if antibiotic treatment is needed'
+        ]
+      };
+    } else if (hasNausea || state.associatedSymptoms.includes('Loss of Appetite')) {
+      return {
+        condition: 'Mild Gastroenteritis',
+        probability: 'Moderate Probability',
+        explanation: 'Localized nausea, structural fatigue, and loss of appetite frequently signal transient clinical viral stomach irritation or food sensitivity.',
+        actions: [
+          'Follow a strict bland meal diet (Bananas, Rice, Applesauce, Toast).',
+          'Avoid dairy, fatty spices, caffeine, and carbonated beverages.',
+          'Monitor for dizziness, dry mouth, or significant fluid reduction.',
+          'Schedule a virtual checkup or follow-up with Dr. Pradeep for targeted treatment'
+        ]
+      };
+    } else {
+      // Default fallback
+      return {
+        condition: 'Mild Viral or Physical Overexertion',
+        probability: 'Educational Indicator',
+        explanation: 'Your selected physical anomalies match broad, transient viral states or typical physical stress response elements.',
+        actions: [
+          'Rest comfortably for the next 24 hours.',
+          'Limit heavy occupational or strenuous physical training routines.',
+          'Drink 8-10 glasses of fresh pure water.',
+          'Register for a general consultation checkup to obtain physical biomarkers baseline'
+        ]
+      };
+    }
+  };
+
+  const result = calculateResult();
+
+  const nextStep = (stepNum: number) => {
+    window.scrollTo({ top: 300, behavior: 'smooth' });
+    setState(prev => ({ ...prev, currentStep: stepNum }));
+  };
+
+  const getSeverityLabel = (val: number) => {
+    if (val <= 3) return { text: 'Mild', color: 'text-emerald-600', bg: 'bg-emerald-50', desc: 'Mild severity indicates minor discomfort that is easily manageable.' };
+    if (val <= 7) return { text: 'Moderate', color: 'text-amber-600', bg: 'bg-amber-50', desc: 'Moderate severity indicates symptoms that interfere with daily activities but are manageable.' };
+    return { text: 'Severe', color: 'text-red-600', bg: 'bg-red-50', desc: 'Severe intensity warns of robust physical duress. Immediate clinical consulting or emergency attention may be required.' };
+  };
+
+  const severityInfo = getSeverityLabel(state.severity);
+
+  return (
+    <div className="max-w-[1000px] mx-auto py-6 space-y-10 animate-fade-in">
+      {/* Header Section */}
+      <div className="text-center space-y-4">
+        <h1 className="font-display text-4xl font-extrabold text-[#002045]">Symptom Checker</h1>
+        <p className="font-sans text-base text-gray-500 max-w-2xl mx-auto leading-relaxed">
+          Identify potential causes for your symptoms in just a few steps. This tool provides preliminary analysis for educational purposes.
+        </p>
+      </div>
+
+      {/* Main Wizard Container */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-6 md:p-10 shadow-[0px_4px_20px_rgba(26,54,93,0.03)] relative">
+        
+        {/* Progress Tracker Bar */}
+        <div className="flex justify-between items-center mb-10 relative">
+          <div className="absolute top-1/2 left-0 w-full h-0.5 bg-gray-100 -translate-y-1/2 z-0"></div>
+          
+          {/* Active progress color bar */}
+          <div 
+            className="absolute top-1/2 left-0 h-0.5 bg-[#1960a3] -translate-y-1/2 z-0 transition-all duration-500"
+            style={{ width: `${((state.currentStep - 1) / 3) * 100}%` }}
+          ></div>
+
+          {[1, 2, 3, 4].map((stepNum) => {
+            const isCompleted = state.currentStep > stepNum;
+            const isActive = state.currentStep === stepNum;
+            return (
+              <div 
+                key={stepNum}
+                className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center font-sans font-bold text-sm transition-all duration-300 ${
+                  isCompleted 
+                    ? 'bg-[#88f9b0] text-[#00210f]'
+                    : isActive 
+                      ? 'bg-[#1960a3] text-white ring-4 ring-blue-100'
+                      : 'bg-gray-100 text-gray-400'
+                }`}
+              >
+                {isCompleted ? (
+                  <span className="material-symbols-outlined text-base">done</span>
+                ) : (
+                  stepNum
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* STEP 1: Symptom Selection */}
+        {state.currentStep === 1 && (
+          <div className="space-y-6">
+            <h2 className="font-display text-2xl font-bold text-[#002045]">What are you feeling?</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+              {/* Left Column: Search & Quick selector */}
+              <div className="md:col-span-7 space-y-6">
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">search</span>
+                  <input 
+                    type="text"
+                    value={state.searchQuery}
+                    onChange={(e) => setState(prev => ({ ...prev, searchQuery: e.target.value }))}
+                    placeholder="Search symptoms (e.g. Headache, Fever, Cough)"
+                    className="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1960a3] focus:border-[#1960a3] bg-gray-50 text-sm font-sans"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs font-sans font-bold text-gray-400 uppercase tracking-wider block">Common symptoms</label>
+                  <div className="flex flex-wrap gap-2">
+                    {filteredSymptoms.map((sym) => {
+                      const isSelected = state.selectedSymptoms.includes(sym.name);
+                      return (
+                        <button
+                          key={sym.id}
+                          onClick={() => handleSymptomToggle(sym.name)}
+                          className={`px-4 py-2 rounded-full border text-xs font-sans font-semibold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#1960a3] border-[#1960a3] text-white shadow-sm'
+                              : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {sym.name} {isSelected && '✓'}
+                        </button>
+                      );
+                    })}
+                    {filteredSymptoms.length === 0 && (
+                      <p className="text-xs text-gray-400 italic">No symptoms match your query.</p>
+                    )}
+                  </div>
+                </div>
+
+                {state.selectedSymptoms.length > 0 && (
+                  <div className="p-4 bg-blue-50/60 rounded-xl space-y-2">
+                    <p className="text-xs font-sans font-bold text-[#1960a3]">Selected ({state.selectedSymptoms.length}):</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {state.selectedSymptoms.map((symptom, idx) => (
+                        <span key={idx} className="bg-[#1960a3] text-white px-2.5 py-1 rounded-md text-[11px] font-sans font-bold flex items-center gap-1">
+                          {symptom}
+                          <button onClick={() => handleSymptomToggle(symptom)} className="hover:opacity-85 font-black text-white pointer-events-auto">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Body Area Selector map */}
+              <div className="md:col-span-5 bg-gray-50 rounded-2xl p-6 border border-gray-100 flex flex-col items-center justify-center min-h-[320px]">
+                <div className="relative w-48 h-64 flex items-center justify-center">
+                  <img 
+                    alt="Human body anatomical diagram monochromatic medical focus representation"
+                    className="w-full h-full object-contain opacity-70"
+                    referrerPolicy="no-referrer"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBA_cA-yuvFf8x3Rp8a7IGrb8aJUf4Q9yo0ediKdoHCOWKboJK3oJViHbYub2mGkTnaSJFe_GvLiX_PAYXO4ueStzIlbAkduglfnMO1_C_qI1xUezA4g72OuoNAJe72rJMSDrt8ha5gsuMhFwkmFt8PtTCzHssydnWIIAFjA2hV_UeZwPN2pGj7H450vwKd2d8L2x1UU_uN4s2rj4AWHh2RUjpMbKbiqbHtvmkUHaNa0ILU3jv5Rm1gwMETnbKkahq1EiaEtOgPQCQ"
+                  />
+                  {/* Interactive markers positioned relatively */}
+                  <button 
+                    onClick={() => handleBodyAreaClick('head')}
+                    title="Click to select Head & Face symptoms"
+                    className="absolute top-6 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-[#1960a3]/20 hover:bg-[#1960a3]/40 border border-[#1960a3]/60 flex items-center justify-center transition-all cursor-pointer animate-pulse"
+                  >
+                    <span className="text-[9px] font-bold text-[#002045]">Head</span>
+                  </button>
+                  <button 
+                    onClick={() => handleBodyAreaClick('chest')}
+                    title="Click to select Chest & Resp symptoms"
+                    className="absolute top-20 left-1/3 w-8 h-8 rounded-full bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/60 flex items-center justify-center transition-all cursor-pointer animate-pulse"
+                  >
+                    <span className="text-[9px] font-bold text-emerald-950">Chest</span>
+                  </button>
+                  <button 
+                    onClick={() => handleBodyAreaClick('abdomen')}
+                    title="Click to select Abdominal symptoms"
+                    className="absolute top-32 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/60 flex items-center justify-center transition-all cursor-pointer animate-pulse"
+                  >
+                    <span className="text-[9px] font-bold text-amber-950">Core</span>
+                  </button>
+                </div>
+                <p className="mt-4 font-sans font-bold text-xs text-gray-500 text-center">
+                  Select Anatomical System above or use search index.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-gray-100 flex justify-end">
+              <button
+                disabled={state.selectedSymptoms.length === 0}
+                onClick={() => nextStep(2)}
+                className={`px-8 py-3 rounded-lg font-sans font-bold text-sm flex items-center gap-2 transition-all cursor-pointer ${
+                  state.selectedSymptoms.length > 0
+                    ? 'bg-[#1960a3] hover:bg-blue-800 text-white'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Continue 
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: Severity */}
+        {state.currentStep === 2 && (
+          <div className="space-y-6">
+            <h2 className="font-display text-2xl font-bold text-[#002045]">How severe is it?</h2>
+            
+            <div className="p-6 md:p-8 bg-gray-50 rounded-2xl border border-gray-100 space-y-6">
+              <div className="flex justify-between items-center text-xs font-sans font-bold text-gray-400 uppercase tracking-widest">
+                <span>Mild (1-3)</span>
+                <span>Moderate (4-7)</span>
+                <span>Severe (8-10)</span>
+              </div>
+
+              <input 
+                type="range"
+                min="1"
+                max="10"
+                value={state.severity}
+                onChange={handleSeverityChange}
+                className="w-full h-2.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#1960a3]"
+              />
+
+              <div className="flex justify-between items-center">
+                <span className="font-sans text-xs text-gray-500">Current Rating:</span>
+                <span className={`px-4 py-1.5 rounded-full text-xs font-sans font-bold ${severityInfo.bg} ${severityInfo.color}`}>
+                  {severityInfo.text} ({state.severity}/10)
+                </span>
+              </div>
+
+              <div className="pt-4 border-t border-gray-200 flex items-start gap-4">
+                <span className="material-symbols-outlined text-xl text-[#1960a3] pt-0.5">info</span>
+                <p className="font-sans text-xs text-gray-600 leading-relaxed">
+                  {severityInfo.desc}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-xs font-sans font-bold text-gray-400 uppercase tracking-wider block">Frequency Pattern</label>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(['Intermittent', 'Constant', 'Worsening'] as const).map((freq) => {
+                  const isChecked = state.frequency === freq;
+                  return (
+                    <button
+                      key={freq}
+                      onClick={() => selectFrequency(freq)}
+                      className={`p-6 rounded-xl border text-center font-sans space-y-2 cursor-pointer transition-all ${
+                        isChecked
+                          ? 'border-[#1960a3] bg-blue-50/60 ring-2 ring-[#1960a3]/20 shadow-sm'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-3xl text-[#1960a3] block">
+                        {freq === 'Intermittent' ? 'update' : freq === 'Constant' ? 'repeat' : 'trending_up'}
+                      </span>
+                      <h4 className="font-display font-bold text-sm text-[#002045]">{freq}</h4>
+                      <p className="text-[11px] text-gray-500">
+                        {freq === 'Intermittent' && 'Comes and goes throughout the day'}
+                        {freq === 'Constant' && 'Present constantly at all times'}
+                        {freq === 'Worsening' && 'Steadily multiplying in density'}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-gray-100 flex justify-between">
+              <button
+                onClick={() => nextStep(1)}
+                className="px-6 py-3 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 cursor-pointer text-sm font-sans font-semibold flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-sm">arrow_back</span> Back
+              </button>
+              <button
+                onClick={() => nextStep(3)}
+                className="px-8 py-3 bg-[#1960a3] hover:bg-blue-800 text-white rounded-lg font-sans font-bold text-sm flex items-center gap-2 transition-all cursor-pointer"
+              >
+                Continue 
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: Duration */}
+        {state.currentStep === 3 && (
+          <div className="space-y-6">
+            <h2 className="font-display text-2xl font-bold text-[#002045]">How long has this been occurring?</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Duration button panels */}
+              <div className="space-y-3">
+                <label className="text-xs font-sans font-bold text-gray-400 uppercase tracking-wider block">Duration period</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['Less than 24h', '1-3 Days', '4-7 Days', 'More than a week'] as const).map((dur) => {
+                    const isChecked = state.duration === dur;
+                    return (
+                      <button
+                        key={dur}
+                        onClick={() => selectDuration(dur)}
+                        className={`p-4 rounded-xl border font-sans font-semibold text-xs text-center transition-all cursor-pointer ${
+                          isChecked
+                            ? 'bg-[#1960a3] border-[#1960a3] text-white'
+                            : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {dur}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Associated Symptoms checkboxes */}
+              <div className="space-y-3">
+                <label className="text-xs font-sans font-bold text-gray-400 uppercase tracking-wider block">Associated Symptoms (Optional)</label>
+                
+                <div className="space-y-3 font-sans">
+                  {['Loss of Appetite', 'Dizziness', 'Body Aches'].map((name) => {
+                    const isChecked = state.associatedSymptoms.includes(name);
+                    return (
+                      <label 
+                        onClick={() => handleAssociatedToggle(name)}
+                        key={name}
+                        className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${
+                          isChecked
+                            ? 'bg-blue-50/50 border-[#1960a3]/50 text-[#1960a3]'
+                            : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <input 
+                          type="checkbox"
+                          checked={isChecked}
+                          readOnly
+                          className="w-4 h-4 rounded text-[#1960a3] focus:ring-[#1960a3] border-gray-300"
+                        />
+                        <span className="text-xs font-semibold">{name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-gray-100 flex justify-between">
+              <button
+                onClick={() => nextStep(2)}
+                className="px-6 py-3 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 cursor-pointer text-sm font-sans font-semibold flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-sm">arrow_back</span> Back
+              </button>
+              <button
+                onClick={() => nextStep(4)}
+                className="px-8 py-3 bg-[#1960a3] hover:bg-blue-800 text-white rounded-lg font-sans font-bold text-sm flex items-center gap-2 transition-all cursor-pointer"
+              >
+                Analyze Symptoms 
+                <span className="material-symbols-outlined text-sm">analytics</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: Analysis Result */}
+        {state.currentStep === 4 && (
+          <div className="space-y-8">
+            <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+              <div className="w-12 h-12 bg-[#1960a3] text-white rounded-full flex items-center justify-center">
+                <span className="material-symbols-outlined text-xl">assignment</span>
+              </div>
+              <div>
+                <h2 className="font-display text-2xl font-bold text-[#002045]">Preliminary Assessment Analysis</h2>
+                <span className="text-xs font-sans text-gray-500 uppercase tracking-widest font-semibold block">Educational Outline Purposes Only</span>
+              </div>
+            </div>
+
+            {/* Disclaimer Banner alert */}
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-5 text-amber-900 flex gap-4 items-start">
+              <span className="material-symbols-outlined text-amber-700 text-2xl">warning</span>
+              <div className="space-y-1">
+                <h4 className="font-display font-semibold text-sm">Important Health Disclaimer</h4>
+                <p className="font-sans text-xs leading-relaxed opacity-90">
+                  This report is strictly for informational & educational outline. It does not constitute actual medical diagnosis or directive treatment. If you are experiencing high acute fever, dynamic breathing difficulties, severe localized chest pains, or any medical emergency, please call 911 immediately.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Left Side: Assessment details */}
+              <div className="lg:col-span-7 space-y-6">
+                
+                {/* Condition breakdown */}
+                <div className="p-6 bg-[#f1f4f6]/60 border-l-4 border-[#1960a3] rounded-r-xl space-y-3">
+                  <span className="text-xs font-sans font-bold text-[#1960a3] uppercase tracking-wider block">Possible Condition Indicator</span>
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-display font-bold text-lg text-[#002045]">{result.condition}</h3>
+                    <span className="px-3 py-1 bg-blue-100 text-[#1960a3] rounded-full text-[10px] font-sans font-bold">
+                      {result.probability}
+                    </span>
+                  </div>
+                  <p className="font-sans text-xs text-gray-600 leading-relaxed">
+                    {result.explanation}
+                  </p>
+                </div>
+
+                {/* Actions guidelines */}
+                <div className="p-6 bg-white border border-gray-100 rounded-xl space-y-3 shadow-[0px_2px_10px_rgba(0,0,0,0.01)]">
+                  <h4 className="font-display font-bold text-sm text-[#002045]">Recommended Immediate Guidelines</h4>
+                  <ul className="space-y-2 font-sans text-xs text-gray-600 list-disc pl-4 leading-relaxed">
+                    {result.actions.map((action, idx) => (
+                      <li key={idx}>{action}</li>
+                    ))}
+                  </ul>
+                </div>
+
+              </div>
+
+              {/* Right Side: Quick Doctor Booking Callback */}
+              <div className="lg:col-span-5 bg-gray-50 border border-gray-100 p-6 rounded-2xl flex flex-col justify-between space-y-6">
+                <div className="space-y-3">
+                  <h4 className="font-display font-bold text-base text-[#002045]">Personalized Clinical Diagnosis</h4>
+                  <p className="font-sans text-xs text-gray-500 leading-relaxed">
+                    Schedule a diagnostic evaluation with Dr. Pradeep to inspect biomarkers, review active status reports, and receive precise prescription care plans.
+                  </p>
+                  <div className="h-px bg-gray-200"></div>
+                  <div className="flex items-center gap-2 text-xs font-sans font-bold text-[#1960a3]">
+                    <span className="material-symbols-outlined text-base">event_available</span>
+                    <span>Next Clinic Slot Today, 3:00 PM</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleBookWithPrefill(result.condition)}
+                  className="w-full bg-[#1960a3] hover:bg-blue-800 text-white font-sans font-bold text-sm py-3.5 rounded-xl shadow-lg transition-all active:scale-[0.98] cursor-pointer text-center"
+                >
+                  Book with Dr. Pradeep Now
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-gray-100 flex justify-center">
+              <button
+                onClick={() => setState({
+                  currentStep: 1,
+                  selectedSymptoms: [],
+                  searchQuery: '',
+                  severity: 5,
+                  frequency: 'Constant',
+                  duration: '1-3 Days',
+                  associatedSymptoms: []
+                })}
+                className="text-gray-500 hover:text-gray-800 font-sans font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span> Keep checking / Reset Wizard
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* HIPAA Trust Badges */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 opacity-75 max-w-2xl mx-auto text-center">
+        <div className="flex items-center gap-2 justify-center text-xs font-sans font-semibold text-gray-500">
+          <span className="material-symbols-outlined text-[#1a365d] text-base">security</span>
+          <span>HIPAA Compliant</span>
+        </div>
+        <div className="flex items-center gap-2 justify-center text-xs font-sans font-semibold text-gray-500">
+          <span className="material-symbols-outlined text-[#1a365d] text-base">lock</span>
+          <span>Encrypted Database</span>
+        </div>
+        <div className="flex items-center gap-2 justify-center text-xs font-sans font-semibold text-gray-500">
+          <span className="material-symbols-outlined text-[#1a365d] text-base">verified_user</span>
+          <span>Board Reviewed Rules</span>
+        </div>
+        <div className="flex items-center gap-2 justify-center text-xs font-sans font-semibold text-gray-500">
+          <span className="material-symbols-outlined text-[#1a365d] text-base">privacy_tip</span>
+          <span>100% Private Analysis</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
